@@ -513,7 +513,7 @@ class RobotAssistant(object):
         dest_name = None
 
         english_map = {
-            "headache": "internal", "pain": "internal", "hurt": "internal", "unwell": "internal", "sick": "internal", "internal medicine": "internal",
+            "headache": "internal", "pain": "internal", "hurt": "internal", "hurts": "internal", "unwell": "internal", "sick": "internal", "internal medicine": "internal",
             "stomach": "gastro", "abdomen": "gastro", "belly": "gastro", "stomach ache": "gastro", "gastroenterology": "gastro",
             "toilet": "restroom", "bathroom": "restroom", "restroom": "restroom", "washroom": "restroom",
             "surgery": "surgery", "trauma": "surgery", "fracture": "surgery", "broken": "surgery", "injury": "surgery",
