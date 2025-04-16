@@ -34,7 +34,7 @@ class RobotAssistant(object):
 
         # Define the vocabulary for speech recognition
         vocab = [
-            "headache", "pain", "hurt", "unwell", "sick", "internal medicine",
+            "headache", "pain", "hurt", "hurts", "unwell", "sick", "internal medicine",
             "stomach", "abdomen", "belly", "stomach ache", "gastroenterology",
             "toilet", "bathroom", "restroom", "washroom",
             "surgery", "trauma", "fracture", "broken", "injury",
