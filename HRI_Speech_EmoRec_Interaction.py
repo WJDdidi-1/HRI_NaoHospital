@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import qi
-from naoqi import ALProxy
+#from naoqi import ALProxy
 import time
 import datetime
 import csv
@@ -18,10 +18,32 @@ import numpy as np
 import pyaudio
 import pickle
 import struct
+from Navigation import run_navigation
+from Path_Calculation import dijkstra
+from GUI import get_updated_maze
+from Motion import move_robot_along_path
 
 # Configuration
 PC_IP = "192.168.1.156"  # IP address of your PC
 PC_PORT = 51599         # Port for communication between PC and NAO
+
+start = (7, 6)
+
+departments = {
+    1: ("internal", (0, 6)),
+    2: ("gastro", (2, 1)),
+    3: ("restroom", (2, 4)),
+    4: ("surgery", (4, 4)),
+    5: ("ent", (6, 4)),
+    6: ("emergency", (7, 6)),
+    7: ("lab", (5, 6))
+}
+
+def get_department_coord(dept_number):
+    if dept_number in departments:
+        return departments[dept_number][1]
+    else:
+        raise ValueError("Invalid department number. Please enter a number from 1 to 7.")
 
 # ---------------------------------------------------------------------------
 # --- PC Sound Localization  ---
@@ -137,14 +159,18 @@ class NAOSoundProxy:
         self.thread = None
         self.running = False
         self.last_energy = 0.0
+        print(pc_port, pc_ip)
 
     def subscribe(self, name):
         if not self.running:
             self.running = True
-            self.thread = threading.Thread(target=self._receive_energy)
-            self.thread.setDaemon(True)
-            self.thread.start()
             self._start_listening()
+            if self.socket:
+                self.thread = threading.Thread(target=self._receive_energy)
+                self.thread.setDaemon(True)
+                self.thread.start()
+            else:
+                print("Socket initialization failed. Receive thread not started.")
 
     def unsubscribe(self, name):
         self.running = False
@@ -247,6 +273,7 @@ class PCCameraReceiver(object):
                 # 通过 ALMemory 发送图像数据
                 self.memory.emit("CameraFrameReceived", frame)
                 # 显示画面
+                print("<<<<，，，，，《《《>>>>")
                 cv2.imshow("PCCameraReceiver - Received Frame", frame)
                 # 调用 cv2.waitKey 定期刷新窗口
                 cv2.waitKey(1)
@@ -383,6 +410,34 @@ class PCFaceDetection:
 # ---------------------------------------------------------------------------
 # --- Original RobotAssistant code ---
 class RobotAssistant(object):
+    destinations = {
+        "internal": "the internal medicine department",
+        "gastro": "the gastroenterology department",
+        "restroom": "the restroom",
+        "surgery": "the surgery department",
+        "ent": "the ent department",
+        "emergency": "the emergency department",
+        "lab": "the laboratory"
+    }
+    destinations1 = {
+        1: "the internal medicine department",
+        2: "the gastroenterology department",
+        3: "the restroom",
+        4: "the surgery department",
+        5: "the ent department",
+        6: "the emergency department",
+        7: "the laboratory"
+    }
+
+    category_map = {
+        "the internal medicine department": 1,
+        "the gastroenterology department": 2,
+        "the restroom": 3,
+        "the surgery department": 4,
+        "the ent department": 5,
+        "the emergency department": 6,
+        "the laboratory": 7
+    }
     def __init__(self, session):
         self.session = session
         try:
@@ -405,6 +460,8 @@ class RobotAssistant(object):
             self.tts.setLanguage("English")
         except Exception as e:
             print("Failed to set TTS language: {}".format(e))
+
+        self.path = []
 
         vocab = [
             "headache", "pain", "hurt", "unwell", "sick", "internal medicine",
@@ -454,15 +511,7 @@ class RobotAssistant(object):
     def classify_destination(self, recognized_words, full_text):
         dest_category = None
         dest_name = None
-        destinations = {
-            "internal": "the internal medicine department",
-            "gastro": "the gastroenterology department",
-            "restroom": "the restroom",
-            "surgery": "the surgery department",
-            "ent": "the ENT department",
-            "emergency": "the emergency department",
-            "lab": "the laboratory"
-        }
+
         english_map = {
             "headache": "internal", "pain": "internal", "hurt": "internal", "unwell": "internal", "sick": "internal", "internal medicine": "internal",
             "stomach": "gastro", "abdomen": "gastro", "belly": "gastro", "stomach ache": "gastro", "gastroenterology": "gastro",
@@ -496,7 +545,7 @@ class RobotAssistant(object):
         else:
             dest_category = None
         if dest_category:
-            dest_name = destinations[dest_category]
+            dest_name = self.destinations[dest_category]
         return dest_name
 
     def classify_emotion(self, recognized_text, energy):
@@ -560,7 +609,8 @@ class RobotAssistant(object):
         if destination:
             self.tts.say("Please follow me, I'll take you to {}.".format(destination))
             try:
-                Navi(destination)
+                self.path = Navi(destination, maze)
+
             except Exception as e:
                 print("Navigating to {} (simulated).".format(destination))
         else:
@@ -632,8 +682,8 @@ class RobotAssistant(object):
                 cv2.waitKey(10)
                 current_time = time.time()
                 if not self.sleeping and (current_time - self.last_interaction_time > 10):
-                    self.go_to_sleep()
-                    self.sleeping = True
+                    #self.go_to_sleep()
+                    #self.sleeping = True
                     print("Entering sleep mode due to inactivity.")
                 time.sleep(0.5)
         except KeyboardInterrupt:
@@ -652,12 +702,52 @@ class RobotAssistant(object):
             except Exception:
                 pass
 
-def Navi(destination):
+
+def Navi(destination, maze):
+    global start
     print("Navigating to {}...".format(destination))
+
+    category_id = RobotAssistant.category_map.get(destination.lower())
+    print("id", category_id)
+    if category_id is None:
+        print("Invalid destination keyword:", destination)
+        return
+
+    destination_name = RobotAssistant.destinations1[category_id]
+    print("Target department is:", destination_name)
+    print("the id is:", category_id)
+
+    end = get_department_coord(category_id)
+
+    print(type(start), type(end))
+
+    import threading
+    import time
+
+    distance, path = dijkstra(maze, start, end)
+    #path, distance = ([(7, 6), (6, 6)], 15)
+
+    t1 = threading.Thread(target = run_navigation(maze, start, end))
+    t1.start()
+
+    print("Navigation complete. Distance:", distance, path)
+
+    t2 = threading.Thread(target = move_robot_along_path(path))
+    t2.start()
+
+    t1.join()
+    t2.join()
+
+    start = end
+
+    #return path
+
 
 # ---------------------------------------------------------------------------
 # --- Main function ---
+maze = get_updated_maze()
 def main(robot_ip="192.168.1.35", robot_port=9559):
+
     real_session = None
     try:
         real_session = qi.Session()
@@ -667,11 +757,11 @@ def main(robot_ip="192.168.1.35", robot_port=9559):
         sys.exit(1)
     # Create a hybrid session
     hybrid_session = HybridSession(real_session)
-    
+
     # 启动摄像头接收服务（后台线程）
     camera_receiver = PCCameraReceiver(hybrid_session.pc_memory, port=8000)
     camera_receiver.start()
-    
+
     assistant = RobotAssistant(hybrid_session)
     assistant.run()
 
