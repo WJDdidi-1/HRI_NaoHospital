@@ -286,6 +286,7 @@ class PCCameraReceiver(object):
         conn.close()
         self.socket.close()
         cv2.destroyAllWindows()
+        print("Frame received with shape:", frame.shape)
 
 # ---------------------------------------------------------------------------
 # --- Implementation of event mechanism ---
