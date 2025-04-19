@@ -375,27 +375,51 @@ class PCSpeechRecognition:
 # --- PC Face Detection  ---
 # Use OpenCV to capture video frames from the PC camera and detect faces
 class PCFaceDetection:
-    def __init__(self, memory):
+    def __init__(self, memory, expr_port=8001):
         self.memory = memory
         self.running = False
         self.thread = None
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        # 新增表情监听相关
+        self.expr_port = expr_port
+        self.expr_socket = None
+        self.expr_thread = None
+        self.expr_running = False
 
-    def subscribe(self, subscriber_name, param1, param2):
+        # 保留原有人脸检测模型
+        self.face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+
+    def subscribe(self, subscriber_name):
+        # 原有人脸检测线程
         if not self.running:
             self.running = True
             self.thread = threading.Thread(target=self._detection_loop)
             self.thread.setDaemon(True)
             self.thread.start()
+        # 新增表情接收线程
+        if not self.expr_running:
+            self.expr_running = True
+            self.expr_thread = threading.Thread(target=self._expr_loop)
+            self.expr_thread.setDaemon(True)
+            self.expr_thread.start()
 
     def unsubscribe(self, subscriber_name):
+        # 停止人脸检测
         self.running = False
+        # 停止表情接收
+        self.expr_running = False
+        if self.expr_socket:
+            try:
+                self.expr_socket.close()
+            except:
+                pass
 
     def _detection_loop(self):
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
             print("Cannot open PC camera")
-            return
+            return 
         while self.running:
             ret, frame = cap.read()
             if not ret:
@@ -403,10 +427,40 @@ class PCFaceDetection:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
             if len(faces) > 0:
+                # 原有回调：检测到人脸就发出事件
                 self.memory.emit("FaceDetected", [None, [faces[0].tolist()]])
                 time.sleep(1)
             time.sleep(0.1)
         cap.release()
+
+    def _expr_loop(self):
+        """
+        在本地 expr_port 端口监听来自 client 的表情字符串，
+        每收到一次就通过 ALMemory.emit 发布 FaceExpression 事件。
+        """
+        try:
+            self.expr_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.expr_socket.bind(('', self.expr_port))
+            self.expr_socket.listen(1)
+            print("PCFaceDetection: Listening for expressions on port {}".format(self.expr_port))
+            conn, addr = self.expr_socket.accept()
+            print("PCFaceDetection: Expression client connected:", addr)
+            while self.expr_running:
+                data = conn.recv(1024)
+                if not data:
+                    break
+                label = data.decode('utf-8').strip()
+                # 发布新事件
+                self.memory.emit("FaceExpression", [label])
+            conn.close()
+        except Exception as e:
+            print("PCFaceDetection expression loop error:", e)
+        finally:
+            if self.expr_socket:
+                try:
+                    self.expr_socket.close()
+                except:
+                    pass
 
 # ---------------------------------------------------------------------------
 # --- Original RobotAssistant code ---
