@@ -1,0 +1,12 @@
+import cv2
+
+print(" cam")
+for i in range(5):
+    cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+    if cap.isOpened():
+        ret, frame = cap.read()
+        mean_val = frame.mean() if ret and frame is not None else 'N/A'
+        print(f"Camera {i}:  Opened, Mean Brightness: {mean_val}")
+        cap.release()
+    else:
+        print(f"Camera {i}:  Unavailable")

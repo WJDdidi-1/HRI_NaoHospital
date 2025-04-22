@@ -1,84 +1,120 @@
+import os
 import cv2
 import socket
 import struct
 import pickle
-import threading
 import time
-
-# 如果你用 Keras/TensorFlow
-from tensorflow.keras.models import load_model
 import numpy as np
+from tensorflow.keras.models import load_model
+
+# 设置兼容 Keras 3 的环境变量（用于加载旧模型）
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
 # 配置
-SERVER_IP = '127.0.0.1'
-FRAME_PORT = 8000       # 原来的视频帧端口
-EXPR_PORT = 8001        # 新增的表情标签端口
+SERVER_IP = '127.0.0.1'  # 改成服务器IP，如 NAO 的 IP
+FRAME_PORT = 8000
+EXPR_PORT = 8001
 
-# 加载人脸检测 & 表情识别模型
+# 加载人脸检测模型
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
-expr_model = load_model('expression_model.h5')    # 请将模型文件放在同目录
-expr_labels = ['angry','disgust','fear','happy','sad','surprise','neutral']
+
+# 加载表情识别模型
+model_path = 'expression_model.h5'
+if not os.path.exists(model_path):
+    print("❌ 表情模型文件 expression_model.h5 未找到，请放在当前目录")
+    exit(1)
+
+expr_model = load_model(model_path, compile=False)
+expr_labels = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
 
 def recognize_expression(face_img):
-    gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-    resized = cv2.resize(gray, (48, 48))
-    normalized = resized.astype('float32') / 255.0
-    input_data = normalized.reshape(1, 48, 48, 1)
-    preds = expr_model.predict(input_data)
-    return expr_labels[np.argmax(preds)]
+    try:
+        gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
+        resized = cv2.resize(gray, (48, 48))
+        normalized = resized.astype('float32') / 255.0
+        input_data = normalized.reshape(1, 48, 48, 1)
+        preds = expr_model.predict(input_data, verbose=0)
+        return expr_labels[np.argmax(preds)]
+    except Exception as e:
+        print("⚠️ 表情识别失败:", e)
+        return "unknown"
 
 def main():
-    # 连接视频帧通道
-    frame_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    frame_sock.connect((SERVER_IP, FRAME_PORT))
-    # 新增：连接表情标签通道
-    expr_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    expr_sock.connect((SERVER_IP, EXPR_PORT))
-
-    # 打开摄像头
+    # ✅ 第一步：先尝试打开摄像头
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     if not cap.isOpened():
-        print("[Client] Cannot open camera")
+        print("❌ 无法打开摄像头")
+        return
+    print("✅ 摄像头已打开")
+
+    # ✅ 第二步：摄像头正常后再连接两个 socket
+    try:
+        frame_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        frame_sock.connect((SERVER_IP, FRAME_PORT))
+        print(f"✅ 已连接到视频帧端口 {FRAME_PORT}")
+    except Exception as e:
+        print(f"❌ 无法连接到视频帧端口 {FRAME_PORT}：{e}")
+        cap.release()
+        return
+
+    try:
+        expr_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        expr_sock.connect((SERVER_IP, EXPR_PORT))
+        print(f"✅ 已连接到表情端口 {EXPR_PORT}")
+    except Exception as e:
+        print(f"❌ 无法连接到表情端口 {EXPR_PORT}：{e}")
+        frame_sock.close()
+        cap.release()
         return
 
     try:
         while True:
             ret, frame = cap.read()
-            if not ret:
-                break
+            if not ret or frame is None or frame.size == 0:
+                print("⚠️ 摄像头读取失败或帧为空")
+                time.sleep(0.1)
+                continue
 
-            # —— 新增：表情识别（节流，每秒最多 2 次）
-            start_ts = time.time()
+            # 人脸检测
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, 1.1, 5)
+
             if len(faces) > 0:
                 x, y, w, h = faces[0]
-                face_roi = frame[y:y+h, x:x+w]
+                face_roi = frame[y:y + h, x:x + w]
                 expr_label = recognize_expression(face_roi)
-                # 发送表情标签
-                expr_sock.sendall(expr_label.encode('utf-8'))
 
-            # —— 原有：发送视频帧
+                # 发送表情标签
+                try:
+                    expr_sock.sendall(expr_label.encode('utf-8'))
+                except Exception as e:
+                    print(f"⚠️ 表情标签发送失败：{e}")
+
+            # 发送视频帧
             ret2, buffer = cv2.imencode('.jpg', frame)
             if not ret2:
                 continue
-            data = pickle.dumps(buffer)
+            data = pickle.dumps(buffer, protocol=2)
             message_size = struct.pack("!L", len(data))
-            frame_sock.sendall(message_size + data)
 
-            # 本地展示
+            try:
+                frame_sock.sendall(message_size + data)
+            except Exception as e:
+                print(f"⚠️ 视频帧发送失败：{e}")
+                break
+
+            # 显示画面
             cv2.imshow("Client - Captured Frame", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-            # 控制识别频率
-            elapsed = time.time() - start_ts
-            if elapsed < 0.5:
-                time.sleep(0.5 - elapsed)
+            # 控制频率（最多每秒 2 次）
+            time.sleep(0.5)
 
     finally:
+        print("🔚 正在释放资源...")
         cap.release()
         frame_sock.close()
         expr_sock.close()

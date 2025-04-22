@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import qi
-#from naoqi import ALProxy
+from naoqi import ALProxy
 import time
 import datetime
 import csv
@@ -10,7 +10,7 @@ import os
 import sys
 import threading
 import socket  # Import the socket module
-
+from naoqi import ALProxy
 # PC side imports
 import speech_recognition as sr
 import cv2
@@ -19,7 +19,7 @@ import pyaudio
 import pickle
 import struct
 from Navigation import run_navigation
-from Path_Calculation import dijkstra
+from Path_Calculation import dijkstra, get_department_coord
 from GUI import get_updated_maze
 from Motion import move_robot_along_path
 
@@ -27,6 +27,8 @@ from Motion import move_robot_along_path
 PC_IP = "192.168.1.156"  # IP address of your PC
 PC_PORT = 51599         # Port for communication between PC and NAO
 
+IP   = "192.168.1.35"
+PORT = 9559
 start = (7, 6)
 
 departments = {
@@ -95,7 +97,7 @@ class PCSoundLocalization:
                                              rate=self.rate,
                                              input=True,
                                              frames_per_buffer=self.chunk,
-                                             input_device_index=1)
+                                             input_device_index=0)
         while self.running:
             try:
                 data = stream.read(self.chunk, exception_on_overflow=False)
@@ -220,6 +222,14 @@ class NAOSoundProxy:
         return self.last_energy
 
 # ---------------------------------------------------------------------------
+def _read_exact(conn, size):
+    buf = ''
+    while len(buf) < size:
+        chunk = conn.recv(size - len(buf))
+        if not chunk:
+            raise IOError("Connection closed while reading")
+        buf += chunk
+    return buf
 # --- PCCameraReceiver ---
 class PCCameraReceiver(object):
     def __init__(self, memory, port=8000):
@@ -228,6 +238,15 @@ class PCCameraReceiver(object):
         self.running = False
         self.thread = None
         self.socket = None
+
+    def _read_exact(conn, size):
+        buf = ''
+        while len(buf) < size:
+            chunk = conn.recv(size - len(buf))
+            if not chunk:
+                raise IOError("Connection closed while reading")
+            buf += chunk
+        return buf
 
     def start(self):
         if not self.running:
@@ -241,6 +260,15 @@ class PCCameraReceiver(object):
         if self.socket:
             self.socket.close()
 
+    def _read_exact(conn, size):
+        buf = ''
+        while len(buf) < size:
+            chunk = conn.recv(size - len(buf))
+            if not chunk:
+                raise IOError("Connection closed while reading")
+            buf += chunk
+        return buf
+
     def _receive_loop(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind(('', self.port))
@@ -248,45 +276,29 @@ class PCCameraReceiver(object):
         print("PCCameraReceiver: Listening on port {}".format(self.port))
         conn, addr = self.socket.accept()
         print("PCCameraReceiver: Connected by", addr)
-        data = ""
-        payload_size = struct.calcsize("L")
+
+        payload_size = struct.calcsize("!L")
         while self.running:
             try:
-                while len(data) < payload_size:
-                    packet = conn.recv(4096)
-                    if not packet:
-                        break
-                    data += packet
-                if not data:
-                    break
-                packed_msg_size = data[:payload_size]
-                data = data[payload_size:]
-                msg_size = struct.unpack("L", packed_msg_size)[0]
-                while len(data) < msg_size:
-                    data += conn.recv(4096)
-                frame_data = data[:msg_size]
-                data = data[msg_size:]
+                packed_msg_size = _read_exact(conn, payload_size)
+                msg_size = struct.unpack("!L", packed_msg_size)[0]
+                frame_data = _read_exact(conn, msg_size)
                 buffer = pickle.loads(frame_data)
-                frame = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+                frame = cv2.imdecode(np.fromstring(buffer, dtype=np.uint8), cv2.IMREAD_COLOR)
                 if frame is None:
                     continue
-                # 通过 ALMemory 发送图像数据
                 self.memory.emit("CameraFrameReceived", frame)
-                # 显示画面
-                print("<<<<，，，，，《《《>>>>")
                 cv2.imshow("PCCameraReceiver - Received Frame", frame)
-                # 调用 cv2.waitKey 定期刷新窗口
-                cv2.waitKey(1)
-                # 如检测到 'q' 键，则退出
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
             except Exception as e:
-                print("PCCameraReceiver error:", e)
+                print("⚠️ 图像解码或显示出错:", e)
                 break
+
         conn.close()
         self.socket.close()
         cv2.destroyAllWindows()
-        print("Frame received with shape:", frame.shape)
+
 
 # ---------------------------------------------------------------------------
 # --- Implementation of event mechanism ---
@@ -352,7 +364,8 @@ class PCSpeechRecognition:
             try:
                 with self.microphone as source:
                     self.recognizer.adjust_for_ambient_noise(source)
-                    print("Listening from PC microphone...")
+                    if not getattr(self, 'keyboard_mode', False):
+                        print("Listening from PC microphone...")
                     audio = self.recognizer.listen(source, timeout=5)
                 try:
                     recognized_text = self.recognizer.recognize_sphinx(audio, language=self.language)
@@ -542,7 +555,7 @@ class RobotAssistant(object):
             word_subscriber = self.memory.subscriber("WordRecognized")
             word_subscriber.signal.connect(self.on_word_recognized)
 
-            self.face_detection.subscribe("FaceDetect", 500, 0.0)
+            self.face_detection.subscribe("FaceDetect")
             face_subscriber = self.memory.subscriber("FaceDetected")
             face_subscriber.signal.connect(self.on_face_detected)
 
@@ -760,42 +773,31 @@ class RobotAssistant(object):
 
 def Navi(destination, maze):
     global start
-    print("Navigating to {}...".format(destination))
+    tts = ALProxy("ALTextToSpeech", IP, PORT)
 
-    category_id = RobotAssistant.category_map.get(destination.lower())
-    print("id", category_id)
-    if category_id is None:
-        print("Invalid destination keyword:", destination)
+    cat_id = RobotAssistant.category_map.get(destination.lower())
+    if cat_id is None:
+        tts.say("Invalid destination")
+        print("Invalid keyword:", destination)
         return
 
-    destination_name = RobotAssistant.destinations1[category_id]
-    print("Target department is:", destination_name)
-    print("the id is:", category_id)
+    end = get_department_coord(cat_id)
+    name = RobotAssistant.destinations1[cat_id]
+    print("Navigating to", name)
 
-    end = get_department_coord(category_id)
+    dist, path = dijkstra(maze, start, end)
+    if dist == 0 or len(path) < 2:
+        tts.say("Already at " + name)
+        print("Already at", name)
+        return
 
-    print(type(start), type(end))
+    tts.say("Navigating to " + name)
+    run_navigation(maze, start, end, True)
 
-    import threading
-    import time
-
-    distance, path = dijkstra(maze, start, end)
-    #path, distance = ([(7, 6), (6, 6)], 15)
-
-    t1 = threading.Thread(target = run_navigation(maze, start, end))
-    t1.start()
-
-    print("Navigation complete. Distance:", distance, path)
-
-    t2 = threading.Thread(target = move_robot_along_path(path))
-    t2.start()
-
-    t1.join()
-    t2.join()
+    move_robot_along_path(path, maze, end)
+    tts.say("Arrived at " + name)
 
     start = end
-
-    #return path
 
 
 # ---------------------------------------------------------------------------

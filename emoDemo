@@ -1,31 +1,28 @@
 import os
-# ✅ 解决新版 Keras 加载 .h5 模型的问题
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
 import cv2
 import numpy as np
 from tensorflow.keras.models import load_model
 
-# 加载模型
-model = load_model('expression_model.h5')  # 确保模型文件在同一目录
+model = load_model('expression_model.h5', compile=False)
 labels = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
 
-# 加载人脸检测分类器
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
 
-# 打开 mac 摄像头
-cap = cv2.VideoCapture(0)  # macOS 下一般为 0，无需指定 CAP_DSHOW
+# Windows 系统用 CAP_DSHOW
+cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
 
 if not cap.isOpened():
-    print("❌ Cannot open camera.")
+    print( "Cannot open camera.")
     exit()
 
 while True:
     ret, frame = cap.read()
     if not ret:
-        print("❌ Can't receive frame.")
+        print(" Can't receive frame.")
         break
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -37,17 +34,15 @@ while True:
         roi_normalized = roi_resized.astype('float32') / 255.0
         roi_input = roi_normalized.reshape(1, 64, 64, 1)
 
-        prediction = model.predict(roi_input)
+        prediction = model.predict(roi_input, verbose=0)
         label = labels[np.argmax(prediction)]
 
-        # 在画面中画出人脸框和标签
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
         cv2.putText(frame, label, (x, y - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
-    cv2.imshow('Emotion Recognition Demo (Mac)', frame)
+    cv2.imshow('Emotion Recognition Demo (Windows)', frame)
 
-    # 按 q 键退出
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 

@@ -4,6 +4,20 @@ directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 rows = 8
 cols = 8
 
+dept_coords = {
+    1: (0, 6),  # internal
+    2: (2, 1),  # gastro
+    3: (2, 4),  # restroom
+    4: (4, 4),  # surgery
+    5: (6, 4),  # ent
+    6: (7, 6),  # emergency
+    7: (5, 6),  # lab
+}
+
+def get_department_coord(dept_id):
+    return dept_coords.get(dept_id)
+
+
 def dijkstra(maze, start, end):
     heap = [(0, start)]
     distances = {start: 0}
@@ -22,7 +36,7 @@ def dijkstra(maze, start, end):
         for dx, dy in directions:
             nx, ny = current[0] + dx, current[1] + dy
             neighbor = (nx, ny)
-            if rows > nx >= 0 and 0 <= ny < cols and maze[nx][ny] != 0:
+            if 0 <= nx < rows and 0 <= ny < cols and maze[nx][ny] != 0:
                 new_dist = dist + maze[nx][ny]
                 if neighbor not in distances or new_dist < distances[neighbor]:
                     distances[neighbor] = new_dist
