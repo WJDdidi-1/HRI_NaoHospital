@@ -69,13 +69,6 @@ class PCSoundLocalization:
         if param == "EnergyComputation":
             self.energy_computation = value
 
-    def subscribe(self, subscriber_name):
-        if not self.running:
-            self.running = True
-            self.thread = threading.Thread(target=self._sound_loop)
-            self.thread.setDaemon(True)
-            self.thread.start()
-            self._connect_to_nao()
 
     def unsubscribe(self, subscriber_name):
         self.running = False
@@ -277,20 +270,30 @@ class PCCameraReceiver(object):
         conn, addr = self.socket.accept()
         print("PCCameraReceiver: Connected by", addr)
 
+        # 每条消息前 4 字节是长度
         payload_size = struct.calcsize("!L")
+
         while self.running:
             try:
+                # 1) 读取长度
                 packed_msg_size = _read_exact(conn, payload_size)
                 msg_size = struct.unpack("!L", packed_msg_size)[0]
+
+                # 2) 读取 JPEG bytes
                 frame_data = _read_exact(conn, msg_size)
-                buffer = pickle.loads(frame_data)
-                frame = cv2.imdecode(np.fromstring(buffer, dtype=np.uint8), cv2.IMREAD_COLOR)
+
+                # 3) 直接按 bytes 解码成 ndarray
+                frame_arr = np.frombuffer(frame_data, dtype=np.uint8)
+                frame = cv2.imdecode(frame_arr, cv2.IMREAD_COLOR)
                 if frame is None:
                     continue
+
+                # 4) 发布事件并显示
                 self.memory.emit("CameraFrameReceived", frame)
                 cv2.imshow("PCCameraReceiver - Received Frame", frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
+
             except Exception as e:
                 print("⚠️ 图像解码或显示出错:", e)
                 break
@@ -405,11 +408,11 @@ class PCFaceDetection:
 
     def subscribe(self, subscriber_name):
         # 原有人脸检测线程
-        if not self.running:
-            self.running = True
-            self.thread = threading.Thread(target=self._detection_loop)
-            self.thread.setDaemon(True)
-            self.thread.start()
+        #if not self.running:
+         #   self.running = True
+          #  self.thread = threading.Thread(target=self._detection_loop)
+           # self.thread.setDaemon(True)
+            #self.thread.start()
         # 新增表情接收线程
         if not self.expr_running:
             self.expr_running = True
@@ -555,9 +558,12 @@ class RobotAssistant(object):
             word_subscriber = self.memory.subscriber("WordRecognized")
             word_subscriber.signal.connect(self.on_word_recognized)
 
-            self.face_detection.subscribe("FaceDetect")
-            face_subscriber = self.memory.subscriber("FaceDetected")
-            face_subscriber.signal.connect(self.on_face_detected)
+            # 1) 启动表情接收
+            self.face_detection.subscribe("ExprClient")
+
+            # 2) 订阅“表情”事件
+            expr_sub = self.memory.subscriber("FaceExpression")
+            expr_sub.signal.connect(self.on_face_detected)
 
             self.sound_loc.setParameter("EnergyComputation", True)
             self.sound_loc.subscribe("SoundLoc")
@@ -687,21 +693,39 @@ class RobotAssistant(object):
     def on_face_detected(self, value):
         if not value:
             return
+
         face_detected = False
+        label = "neutral"
+
         try:
             if isinstance(value, list) and len(value) >= 2:
+                label = value[0]  # 接收到的表情标签
                 faceInfoArray = value[1]
                 if faceInfoArray and isinstance(faceInfoArray, list) and len(faceInfoArray) > 0:
                     face_detected = True
         except Exception as e:
             face_detected = True
+
         if face_detected:
             self.last_interaction_time = time.time()
             if self.sleeping:
                 self.wake_up()
                 self.sleeping = False
-                self.tts.say("Hello, how can I help you?")
-                self.log_interaction("neutral", "face")
+
+            # 根据情绪选择回应话语
+            emotion_responses = {
+                "happy": "You look happy today! That makes me glad too.",
+                "sad": "I'm sorry you're feeling down. Let me know if I can help.",
+                "angry": "Take a deep breath. I'm here for you.",
+                "fear": "You’re safe now. Everything will be okay.",
+                "disgust": "I'm sorry about that. Let's figure things out together.",
+                "surprise": "Something unexpected? I'm listening.",
+                "neutral": "Hello, how can I help you?"
+            }
+
+            speech = emotion_responses.get(label, "Hello, how can I help you?")
+            self.tts.say(speech)
+            self.log_interaction(label, "face")
 
     def on_sound_detected(self, value):
         pass

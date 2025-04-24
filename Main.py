@@ -10,6 +10,7 @@ from Navigation import run_navigation
 from Path_Calculation import dijkstra, get_department_coord
 from HRI_Speech_EmoRec_Interaction import (
     HybridSession,
+    PCCameraReceiver,
     RobotAssistant,
     Navi,
     maze,
@@ -40,25 +41,29 @@ def main(robot_ip="192.168.1.35", robot_port=9559):
         print("Failed to connect to %s:%d.\n%s" % (robot_ip, robot_port, e))
         sys.exit(1)
 
-    # 2) Create HybridSession (ASR, face, sound loc)
+    # 2) 创建 HybridSession (PC 端 ASR/Face/SoundLoc 服务)
     hybrid = HybridSession(session)
 
-    # NOTE: Do NOT start PCCameraReceiver here, so the USB webcam stays free
-    # cam = PCCameraReceiver(hybrid.pc_memory, port=8000)
-    # cam.start()
+    # 3) 启动 PC-端摄像头与表情接收服务（在 8000/8001 端口监听）
+    cam = PCCameraReceiver(hybrid.pc_memory, port=8000)
+    cam.start()
+    print("PCCameraReceiver: Listening on port 8000")
+    print("PCFaceDetection: Listening for expressions on port 8001")
 
-    # 3) Prompt for input mode
+    hybrid.pc_face.subscribe("PCFace")
     print("\nSelect input mode:")
     print("  1) Voice input")
     print("  2) Keyboard input")
     choice = raw_input("Enter 1 or 2: ").strip()
 
+    # 5) 创建机器人助手
     assistant = RobotAssistant(hybrid)
+
     if choice == "2":
-        # Keyboard mode
+        # 键盘模式
         assistant.keyboard_mode = True
 
-        # Unsubscribe voice/face/sound loc services
+        # 取消语音/人脸/声源定位订阅
         try:
             assistant.asr.unsubscribe("VoiceRecog")
         except:
@@ -74,7 +79,7 @@ def main(robot_ip="192.168.1.35", robot_port=9559):
 
         keyboard_mode(assistant)
     else:
-        # Voice mode
+        # 语音模式
         assistant.keyboard_mode = False
         assistant.run()
 

@@ -31,19 +31,28 @@ expr_labels = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral'
 
 def recognize_expression(face_img):
     try:
+        # 1) 灰度化
         gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-        resized = cv2.resize(gray, (48, 48))
+        # 2) 调整为 64×64 而不是 48×48
+        resized = cv2.resize(gray, (64, 64))
+        # 3) 归一化
         normalized = resized.astype('float32') / 255.0
-        input_data = normalized.reshape(1, 48, 48, 1)
+        # 4) reshape 为 (1,64,64,1)
+        input_data = normalized.reshape(1, 64, 64, 1)
+
         preds = expr_model.predict(input_data, verbose=0)
-        return expr_labels[np.argmax(preds)]
+        idx = np.argmax(preds)
+        label = expr_labels[idx]
+        print("⚙️ preds:", preds, "=>", label)
+        return label
     except Exception as e:
-        print("⚠️ 表情识别失败:", e)
+        print("⚠️ recognize_expression error:", e)
         return "unknown"
+
 
 def main():
     # ✅ 第一步：先尝试打开摄像头
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
     if not cap.isOpened():
         print("❌ 无法打开摄像头")
         return
@@ -85,7 +94,12 @@ def main():
                 x, y, w, h = faces[0]
                 face_roi = frame[y:y + h, x:x + w]
                 expr_label = recognize_expression(face_roi)
-
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(
+                frame, expr_label,
+                 (x, y - 10),
+                 cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                 (0, 255, 0), 2)
                 # 发送表情标签
                 try:
                     expr_sock.sendall(expr_label.encode('utf-8'))
@@ -93,18 +107,16 @@ def main():
                     print(f"⚠️ 表情标签发送失败：{e}")
 
             # 发送视频帧
-            ret2, buffer = cv2.imencode('.jpg', frame)
+            ret2, jpg = cv2.imencode('.jpg', frame)
             if not ret2:
                 continue
-            data = pickle.dumps(buffer, protocol=2)
+            data = jpg.tobytes()  # <--- 原始 JPEG bytes
             message_size = struct.pack("!L", len(data))
-
             try:
                 frame_sock.sendall(message_size + data)
             except Exception as e:
                 print(f"⚠️ 视频帧发送失败：{e}")
                 break
-
             # 显示画面
             cv2.imshow("Client - Captured Frame", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
