@@ -118,7 +118,7 @@ def main():
                 print(f"⚠️ 视频帧发送失败：{e}")
                 break
             # 显示画面
-            cv2.imshow("Client - Captured Frame", frame)
+            #cv2.imshow("Client - Captured Frame", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 

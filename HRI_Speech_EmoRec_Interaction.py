@@ -400,6 +400,7 @@ class PCFaceDetection:
         self.expr_socket = None
         self.expr_thread = None
         self.expr_running = False
+        self.last_label = "neutral"
 
         # 保留原有人脸检测模型
         self.face_cascade = cv2.CascadeClassifier(
@@ -466,6 +467,7 @@ class PCFaceDetection:
                 if not data:
                     break
                 label = data.decode('utf-8').strip()
+                self.last_label = label
                 # 发布新事件
                 self.memory.emit("FaceExpression", [label])
             conn.close()
@@ -693,39 +695,21 @@ class RobotAssistant(object):
     def on_face_detected(self, value):
         if not value:
             return
-
         face_detected = False
-        label = "neutral"
-
         try:
             if isinstance(value, list) and len(value) >= 2:
-                label = value[0]  # 接收到的表情标签
                 faceInfoArray = value[1]
                 if faceInfoArray and isinstance(faceInfoArray, list) and len(faceInfoArray) > 0:
                     face_detected = True
         except Exception as e:
             face_detected = True
-
         if face_detected:
             self.last_interaction_time = time.time()
             if self.sleeping:
                 self.wake_up()
                 self.sleeping = False
-
-            # 根据情绪选择回应话语
-            emotion_responses = {
-                "happy": "You look happy today! That makes me glad too.",
-                "sad": "I'm sorry you're feeling down. Let me know if I can help.",
-                "angry": "Take a deep breath. I'm here for you.",
-                "fear": "You’re safe now. Everything will be okay.",
-                "disgust": "I'm sorry about that. Let's figure things out together.",
-                "surprise": "Something unexpected? I'm listening.",
-                "neutral": "Hello, how can I help you?"
-            }
-
-            speech = emotion_responses.get(label, "Hello, how can I help you?")
-            self.tts.say(speech)
-            self.log_interaction(label, "face")
+                self.tts.say("Hello, how can I help you?")
+                self.log_interaction("neutral", "face")
 
     def on_sound_detected(self, value):
         pass
@@ -776,7 +760,8 @@ class RobotAssistant(object):
                 if not self.sleeping and (current_time - self.last_interaction_time > 10):
                     #self.go_to_sleep()
                     #self.sleeping = True
-                    print("Entering sleep mode due to inactivity.")
+                    #print("Entering sleep mode due to inactivity.")
+                    r = 1
                 time.sleep(0.5)
         except KeyboardInterrupt:
             print("Shutting down RobotAssistant.")
@@ -796,7 +781,7 @@ class RobotAssistant(object):
 
 
 def Navi(destination, maze):
-    global start
+    global start, detect_flag
     tts = ALProxy("ALTextToSpeech", IP, PORT)
 
     cat_id = RobotAssistant.category_map.get(destination.lower())
@@ -820,6 +805,7 @@ def Navi(destination, maze):
 
     move_robot_along_path(path, maze, end)
     tts.say("Arrived at " + name)
+    detect_flag = 0  # Reset flag after navigation
 
     start = end
 
