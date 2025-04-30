@@ -11,8 +11,7 @@ labels = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
-
-# Windows 系统用 CAP_DSHOW
+#Window
 cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
 
 if not cap.isOpened():

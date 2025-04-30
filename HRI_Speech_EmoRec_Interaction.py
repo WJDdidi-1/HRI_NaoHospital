@@ -24,8 +24,8 @@ from GUI import get_updated_maze
 from Motion import move_robot_along_path
 
 # Configuration
-PC_IP = "192.168.1.156"  # IP address of your PC
-PC_PORT = 51599         # Port for communication between PC and NAO
+PC_IP = "192.168.1.156"
+PC_PORT = 51599         # Port between PC and NAO
 
 IP   = "192.168.1.35"
 PORT = 9559
@@ -48,8 +48,8 @@ def get_department_coord(dept_number):
         raise ValueError("Invalid department number. Please enter a number from 1 to 7.")
 
 # ---------------------------------------------------------------------------
-# --- PC Sound Localization  ---
-# Use PyAudio to compute the energy of audio input from the PC microphone
+# PC Sound Localization
+# audio input from the PC microphone
 class PCSoundLocalization:
     def __init__(self, memory, pc_ip, pc_port):
         self.memory = memory
@@ -106,8 +106,6 @@ class PCSoundLocalization:
                 else:
                     self._connect_to_nao()
 
-                # Construct a data structure similar to NAO's event:
-                # value[1][3] is energy
                 self.memory.emit("ALSoundLocalization/SoundLocated", [None, [None, None, None, energy]])
             except Exception as e:
                 print("PCSoundLocalization error:", e)
@@ -117,8 +115,8 @@ class PCSoundLocalization:
         self.audio_interface.terminate()
 
 # ---------------------------------------------------------------------------
-# --- Hybrid Session ---
-# A hybrid session that returns real NAO services and PC simulated services
+# Hybrid Session
+# returns real NAO services and PC simulated services
 class HybridSession:
     def __init__(self, real_session):
         self.real_session = real_session
@@ -127,7 +125,7 @@ class HybridSession:
         # Create PC services and pass in the memory object
         self.pc_asr = PCSpeechRecognition(self.pc_memory)
         self.pc_face = PCFaceDetection(self.pc_memory)
-        self.pc_sound = PCSoundLocalization(self.pc_memory, PC_IP, PC_PORT)  # Pass PC IP and Port
+        self.pc_sound = PCSoundLocalization(self.pc_memory, PC_IP, PC_PORT)
         self.nao_sound_proxy = NAOSoundProxy(PC_IP, PC_PORT)  # Create the proxy
 
     def service(self, service_name):
@@ -145,7 +143,7 @@ class HybridSession:
 
 # ---------------------------------------------------------------------------
 # --- NAO Sound Proxy ---
-# A proxy class to receive sound data from the PC
+# receive sound data from the PC
 class NAOSoundProxy:
     def __init__(self, pc_ip, pc_port):
         self.pc_ip = pc_ip
@@ -175,7 +173,7 @@ class NAOSoundProxy:
     def _start_listening(self):
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.bind(('', self.pc_port))  # Listen on all interfaces
+            self.socket.bind(('', self.pc_port))
             self.socket.listen(1)
             print("NAO listening for sound data on port {}".format(self.pc_port))
         except Exception as e:
@@ -198,7 +196,7 @@ class NAOSoundProxy:
                     self.last_energy = float(data.decode('utf-8'))
                 except ValueError:
                     print("Received invalid data: {}".format(data))
-                time.sleep(0.01)  # Small delay
+                time.sleep(0.01)
             conn.close()
         except Exception as e:
             print("Error receiving energy: {}".format(e))
@@ -270,32 +268,32 @@ class PCCameraReceiver(object):
         conn, addr = self.socket.accept()
         print("PCCameraReceiver: Connected by", addr)
 
-        # 每条消息前 4 字节是长度
+
         payload_size = struct.calcsize("!L")
 
         while self.running:
             try:
-                # 1) 读取长度
+
                 packed_msg_size = _read_exact(conn, payload_size)
                 msg_size = struct.unpack("!L", packed_msg_size)[0]
 
-                # 2) 读取 JPEG bytes
+
                 frame_data = _read_exact(conn, msg_size)
 
-                # 3) 直接按 bytes 解码成 ndarray
+
                 frame_arr = np.frombuffer(frame_data, dtype=np.uint8)
                 frame = cv2.imdecode(frame_arr, cv2.IMREAD_COLOR)
                 if frame is None:
                     continue
 
-                # 4) 发布事件并显示
+
                 self.memory.emit("CameraFrameReceived", frame)
                 cv2.imshow("PCCameraReceiver - Received Frame", frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
 
             except Exception as e:
-                print("⚠️ 图像解码或显示出错:", e)
+                print("Error in image decoding or display.", e)
                 break
 
         conn.close()
@@ -402,19 +400,16 @@ class PCFaceDetection:
         self.expr_running = False
         self.last_label = "neutral"
 
-        # 保留原有人脸检测模型
         self.face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         )
 
     def subscribe(self, subscriber_name):
-        # 原有人脸检测线程
         #if not self.running:
          #   self.running = True
           #  self.thread = threading.Thread(target=self._detection_loop)
            # self.thread.setDaemon(True)
             #self.thread.start()
-        # 新增表情接收线程
         if not self.expr_running:
             self.expr_running = True
             self.expr_thread = threading.Thread(target=self._expr_loop)
@@ -422,9 +417,7 @@ class PCFaceDetection:
             self.expr_thread.start()
 
     def unsubscribe(self, subscriber_name):
-        # 停止人脸检测
         self.running = False
-        # 停止表情接收
         self.expr_running = False
         if self.expr_socket:
             try:
@@ -444,17 +437,13 @@ class PCFaceDetection:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
             if len(faces) > 0:
-                # 原有回调：检测到人脸就发出事件
                 self.memory.emit("FaceDetected", [None, [faces[0].tolist()]])
                 time.sleep(1)
             time.sleep(0.1)
         cap.release()
 
     def _expr_loop(self):
-        """
-        在本地 expr_port 端口监听来自 client 的表情字符串，
-        每收到一次就通过 ALMemory.emit 发布 FaceExpression 事件。
-        """
+
         try:
             self.expr_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.expr_socket.bind(('', self.expr_port))
@@ -468,7 +457,7 @@ class PCFaceDetection:
                     break
                 label = data.decode('utf-8').strip()
                 self.last_label = label
-                # 发布新事件
+
                 self.memory.emit("FaceExpression", [label])
             conn.close()
         except Exception as e:
@@ -560,10 +549,8 @@ class RobotAssistant(object):
             word_subscriber = self.memory.subscriber("WordRecognized")
             word_subscriber.signal.connect(self.on_word_recognized)
 
-            # 1) 启动表情接收
             self.face_detection.subscribe("ExprClient")
 
-            # 2) 订阅“表情”事件
             expr_sub = self.memory.subscriber("FaceExpression")
             expr_sub.signal.connect(self.on_face_detected)
 
@@ -754,7 +741,6 @@ class RobotAssistant(object):
         print("RobotAssistant is running. Listening for voice or face input...")
         try:
             while True:
-                # 定期调用 cv2.waitKey 来刷新 OpenCV 窗口
                 cv2.waitKey(10)
                 current_time = time.time()
                 if not self.sleeping and (current_time - self.last_interaction_time > 10):
@@ -825,7 +811,6 @@ def main(robot_ip="192.168.1.35", robot_port=9559):
     # Create a hybrid session
     hybrid_session = HybridSession(real_session)
 
-    # 启动摄像头接收服务（后台线程）
     camera_receiver = PCCameraReceiver(hybrid_session.pc_memory, port=8000)
     camera_receiver.start()
 

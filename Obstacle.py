@@ -7,10 +7,7 @@ import time
 # ---------------- Obstacle Avoidance Function ----------------
 
 def avoid_obstacles_after_step(motionProxy, memoryProxy, threshold=0.5):
-    """
-    Simple obstacle avoidance function called after each step forward.
-    It checks the sonar sensors and turns if an obstacle is detected.
-    """
+
     try:
         left = memoryProxy.getData("Device/SubDeviceList/US/Left/Sensor/Value")
         right = memoryProxy.getData("Device/SubDeviceList/US/Right/Sensor/Value")
