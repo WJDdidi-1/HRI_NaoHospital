@@ -29,6 +29,11 @@ def dijkstra(maze, start, end):
                     prev[neighbor] = current
                     heapq.heappush(heap, (new_dist, neighbor))
 
+    if end not in distances:
+        # No route: report it with an empty path. Returning the target as a
+        # one-step "path" made an unreachable department look walkable.
+        return -1, []
+
     path = []
     node = end
     while node:

@@ -1,0 +1,3 @@
+# The planner (Path_Calculation.py) is standard-library Python. The rest of the
+# project needs `naoqi`/`qi`, which are only available on the NAO robot.
+pytest>=7

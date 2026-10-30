@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  path-planning:
+    name: Path planning tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install test runner
+        run: python -m pip install --upgrade pip pytest
+      - name: Test the planner
+        run: python -m pytest -q
+      - name: Check that the planner compiles
+        run: python -m compileall -q Path_Calculation.py
