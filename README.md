@@ -9,6 +9,8 @@ Built for the NAOqi 2.5 runtime (`naoqi`, `qi`); the trajectory and interaction
 modules talk to the robot directly, so they do not run on a laptop. The planner
 is plain Python and **is** covered by tests — that is the part CI checks.
 
+![MediNAO system flow](docs/architecture.svg)
+
 ## What the robot does
 
 1. **Detect a visitor** — `FacialExpressionDetection.py` runs the bundled Keras
