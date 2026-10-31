@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 400" role="img" aria-labelledby="t d">
   <title id="t">MediNAO system flow</title>
-  <desc id="d">Visitor is detected by the camera and expression model, the dialogue asks for a department, the Dijkstra planner routes over the floorplan, and the motion layer walks the robot while speech and face answer the visitor.</desc>
+  <desc id="d">A visitor is seen by the camera and the expression model, the dialogue asks for a department, the Dijkstra planner routes over the floorplan weights and obstacles, and the motion layer walks the robot while speech answers the visitor.</desc>
   <style>
-    .box{fill:#ffffff;stroke:#c9ced6;stroke-width:1.5;rx:10}
+    .box{fill:#ffffff;stroke:#c9ced6;stroke-width:1.5}
     .box-a{fill:#f4f7ff;stroke:#9db4e8}
     .box-b{fill:#f7f7f8;stroke:#cfd3da}
     .t{font:600 13px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;fill:#1d2129}
     .s{font:400 11px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;fill:#5b6472}
-    .m{font:400 10px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#7a8494}
+    .m{font:400 9px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#7a8494}
     .a{stroke:#8d99ab;stroke-width:1.5;fill:none;marker-end:url(#ah)}
     .label{font:400 10px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;fill:#6b7480}
   </style>
@@ -17,82 +17,73 @@
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="960" height="400" fill="#fbfcfd"/>
+  <rect x="0" y="0" width="1000" height="400" fill="#fbfcfd"/>
 
-  <!-- input -->
   <rect class="box box-a" x="24" y="150" width="150" height="76" rx="10"/>
   <text class="t" x="40" y="178">Visitor</text>
   <text class="s" x="40" y="196">speech + face</text>
-  <text class="m" x="40" y="213">camera_client.py</text>
+  <text class="m" x="40" y="214">camera_client.py</text>
 
-  <!-- perception -->
-  <rect class="box" x="222" y="60" width="180" height="86" rx="10"/>
-  <text class="t" x="238" y="86">Expression</text>
-  <text class="s" x="238" y="104">Keras CNN → label</text>
-  <text class="m" x="238" y="121">FacialExpressionDetection.py</text>
+  <rect class="box" x="212" y="52" width="206" height="88" rx="10"/>
+  <text class="t" x="228" y="78">Expression</text>
+  <text class="s" x="228" y="96">Keras CNN → label</text>
+  <text class="m" x="228" y="114">FacialExpressionDetection.py</text>
 
-  <!-- dialogue -->
-  <rect class="box" x="222" y="180" width="180" height="96" rx="10"/>
-  <text class="t" x="238" y="206">Dialogue</text>
-  <text class="s" x="238" y="224">department vocabulary,</text>
-  <text class="s" x="238" y="240">speech in / speech out</text>
-  <text class="m" x="238" y="258">HRI_Speech_EmoRec_Interaction.py</text>
+  <rect class="box" x="212" y="182" width="206" height="96" rx="10"/>
+  <text class="t" x="228" y="208">Dialogue</text>
+  <text class="s" x="228" y="226">department vocabulary</text>
+  <text class="s" x="228" y="242">speech in / speech out</text>
+  <text class="m" x="228" y="262">HRI_Speech_EmoRec_Interaction.py</text>
 
-  <!-- planner -->
-  <rect class="box box-a" x="450" y="180" width="190" height="96" rx="10"/>
-  <text class="t" x="466" y="206">Route planner</text>
-  <text class="s" x="466" y="224">Dijkstra over 8×8 weights</text>
-  <text class="s" x="466" y="240">obstacles inflate cell cost</text>
-  <text class="m" x="466" y="258">Path_Calculation.py</text>
+  <rect class="box box-a" x="462" y="182" width="200" height="96" rx="10"/>
+  <text class="t" x="478" y="208">Route planner</text>
+  <text class="s" x="478" y="226">Dijkstra over 8×8 weights</text>
+  <text class="s" x="478" y="242">obstacles inflate cell cost</text>
+  <text class="m" x="478" y="262">Path_Calculation.py</text>
 
-  <!-- motion -->
-  <rect class="box" x="688" y="180" width="180" height="96" rx="10"/>
-  <text class="t" x="704" y="206">Motion</text>
-  <text class="s" x="704" y="224">grid moves → walk commands</text>
-  <text class="s" x="704" y="240">route drawing</text>
-  <text class="m" x="704" y="258">Motion.py · Navigation.py</text>
+  <rect class="box" x="706" y="182" width="196" height="96" rx="10"/>
+  <text class="t" x="722" y="208">Motion</text>
+  <text class="s" x="722" y="226">grid moves → walk commands</text>
+  <text class="s" x="722" y="242">route drawing</text>
+  <text class="m" x="722" y="262">Motion.py · Navigation.py</text>
 
-  <!-- map editor -->
-  <rect class="box box-b" x="450" y="60" width="190" height="86" rx="10"/>
-  <text class="t" x="466" y="86">Floorplan editor</text>
-  <text class="s" x="466" y="104">cell weights, start, goal</text>
-  <text class="m" x="466" y="121">GUI.py</text>
+  <rect class="box box-b" x="462" y="52" width="200" height="88" rx="10"/>
+  <text class="t" x="478" y="78">Floorplan editor</text>
+  <text class="s" x="478" y="96">cell weights, start, goal</text>
+  <text class="m" x="478" y="114">GUI.py</text>
 
-  <!-- obstacle list -->
-  <rect class="box box-b" x="688" y="60" width="180" height="86" rx="10"/>
-  <text class="t" x="704" y="86">Obstacles</text>
-  <text class="s" x="704" y="104">people and furniture</text>
-  <text class="m" x="704" y="121">Obstacle.py</text>
+  <rect class="box box-b" x="706" y="52" width="196" height="88" rx="10"/>
+  <text class="t" x="722" y="78">Obstacles</text>
+  <text class="s" x="722" y="96">people and furniture</text>
+  <text class="m" x="722" y="114">Obstacle.py</text>
 
-  <!-- robot -->
-  <rect class="box box-a" x="450" y="312" width="190" height="62" rx="10"/>
-  <text class="t" x="466" y="338">NAO V6 · NAOqi 2.5</text>
-  <text class="m" x="466" y="356">Main.py wires the modules</text>
+  <rect class="box box-a" x="462" y="320" width="200" height="56" rx="10"/>
+  <text class="t" x="478" y="345">NAO V6 · NAOqi 2.5</text>
+  <text class="m" x="478" y="363">Main.py wires the modules</text>
 
-  <!-- edges -->
-  <path class="a" d="M174 172 L214 120"/>
-  <text class="label" x="150" y="120">frames</text>
+  <path class="a" d="M174 172 L204 118"/>
+  <text class="label" x="150" y="126">frames</text>
 
-  <path class="a" d="M174 196 L214 214"/>
-  <text class="label" x="176" y="240">speech</text>
+  <path class="a" d="M174 198 L204 214"/>
+  <text class="label" x="176" y="244">speech</text>
 
-  <path class="a" d="M312 146 L312 172"/>
-  <text class="label" x="318" y="166">emotion</text>
+  <path class="a" d="M315 140 L315 174"/>
+  <text class="label" x="322" y="166">emotion</text>
 
-  <path class="a" d="M402 228 L442 228"/>
-  <text class="label" x="404" y="220">destination</text>
+  <path class="a" d="M418 230 L454 230"/>
+  <text class="label" x="396" y="220">destination</text>
 
-  <path class="a" d="M640 228 L680 228"/>
-  <text class="label" x="642" y="220">route</text>
+  <path class="a" d="M662 230 L698 230"/>
+  <text class="label" x="664" y="222">route</text>
 
-  <path class="a" d="M545 146 L545 172"/>
-  <text class="label" x="551" y="166">weights</text>
+  <path class="a" d="M562 140 L562 174"/>
+  <text class="label" x="569" y="166">weights</text>
 
-  <path class="a" d="M688 103 L640 103"/>
-  <text class="label" x="600" y="96">cost</text>
+  <path class="a" d="M704 96 L670 96"/>
+  <text class="label" x="676" y="88">cost</text>
 
-  <path class="a" d="M778 266 L778 300 L700 300"/>
-  <text class="label" x="700" y="292">commands</text>
+  <path class="a" d="M804 278 L804 348 L670 348"/>
+  <text class="label" x="690" y="340">commands</text>
 
-  <text class="label" x="24" y="384">The planner and the obstacle model are plain Python and are covered by the tests in <tspan class="m">tests/</tspan>. Everything that talks to NAOqi needs the robot.</text>
+  <text class="label" x="24" y="392">The planner and the obstacle model are plain Python and are covered by the tests in tests/. Everything that talks to NAOqi needs the robot.</text>
 </svg>
